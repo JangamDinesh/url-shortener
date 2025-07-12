@@ -5,11 +5,12 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 
 @Data
 @Document(collection = "url_mapping")
-public class UrlMapping {
+public class UrlMapping implements Serializable {
 
     @Id
     private String id;

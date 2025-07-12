@@ -1,0 +1,14 @@
+spring.application.name=urlshortener
+
+scheduler.sync.interval=300000
+
+spring.data.mongodb.uri=${MONGODB_URI}
+spring.data.mongodb.database=${MONGODB_DB}
+
+spring.data.redis.host=${REDIS_HOST}
+spring.data.redis.port=${REDIS_PORT}
+spring.data.redis.username=${REDIS_USERNAME}
+spring.data.redis.password=${REDIS_PASSWORD}
+spring.data.redis.ssl.enabled=true
+
+spring.cache.type=redis
