@@ -7,10 +7,16 @@ COPY mvnw .
 COPY .mvn .mvn
 COPY pom.xml .
 
+# Fix permissions
+RUN chmod +x mvnw
+
+# Download dependencies
 RUN ./mvnw dependency:go-offline -B
 
+# Copy source code
 COPY src src
 
+# Build the app
 RUN ./mvnw -q package -DskipTests
 
 # ========== 2. Run Stage ==========
