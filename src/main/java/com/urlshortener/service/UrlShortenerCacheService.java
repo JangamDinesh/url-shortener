@@ -15,15 +15,21 @@ public class UrlShortenerCacheService {
     @Autowired
     UrlMappingRepository urlMappingRepository;
 
-    @Cacheable(value = "urlMappingsByShortCode", key = "#shortCode")
+    @Cacheable(
+            value = "urlMappingsByShortCode",
+            key = "#shortCode",
+            unless = "#result == null"
+    )
     public UrlMapping getByShortCode(String shortCode) {
-        return urlMappingRepository.findByShortCode(shortCode)
-                .orElseThrow(() -> new NotFoundException("Short code not found"));
+        return urlMappingRepository.findByShortCode(shortCode).orElse(null);
     }
 
-    @Cacheable(value = "urlMappingsByOriginalUrl", key = "#originalUrl")
+    @Cacheable(
+            value = "urlMappingsByOriginalUrl",
+            key = "#originalUrl",
+            unless = "#result == null"
+    )
     public UrlMapping getShortCodeByOriginalURL(String originalUrl) {
-        Optional<UrlMapping> existing = urlMappingRepository.findByOriginalUrl(originalUrl);
-        return existing.orElse(null);
+        return urlMappingRepository.findByOriginalUrl(originalUrl).orElse(null);
     }
 }

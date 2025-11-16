@@ -58,7 +58,12 @@ public class UrlShortenerService {
 
 
     public UrlMapping getUrlMappingByShortCode(String shortCode) throws ExpiredException, NotFoundException {
-        UrlMapping mapping = urlShortenerCacheService.getByShortCode(shortCode);  // fetch from cache
+
+        UrlMapping mapping = urlShortenerCacheService.getByShortCode(shortCode);
+
+        if (mapping == null) {
+            throw new NotFoundException("Short code not found");
+        }
 
         String clickKey = "url:" + shortCode + ":clicks";
         String expiryKey = "url:" + shortCode + ":expiry";
@@ -101,7 +106,11 @@ public class UrlShortenerService {
     }
 
     public UrlStatsResponse getStats(String shortCode) {
-        UrlMapping mapping = urlShortenerCacheService.getByShortCode(shortCode);  // from cache
+        UrlMapping mapping = urlShortenerCacheService.getByShortCode(shortCode);
+
+        if (mapping == null) {
+            throw new NotFoundException("Short code not found");
+        }
 
         String clickKey = "url:" + shortCode + ":clicks";
         String expiryKey = "url:" + shortCode + ":expiry";

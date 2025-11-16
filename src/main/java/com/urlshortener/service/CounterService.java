@@ -18,7 +18,7 @@ public class CounterService {
     public long getNextSequence(String name) {
         Document counter = mongoTemplate.findAndModify(
                 Query.query(Criteria.where("_id").is(name)),
-                new Update().inc("seq", 1),
+                new Update().inc("seq", 1L),
                 FindAndModifyOptions.options().returnNew(true).upsert(true),
                 Document.class,
                 "counters"
