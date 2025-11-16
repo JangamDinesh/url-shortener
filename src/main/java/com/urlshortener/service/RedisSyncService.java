@@ -26,12 +26,12 @@ public class RedisSyncService {
 
     @PostConstruct
     public void logInterval() {
-        System.out.println("🕒 Redis Sync Interval Configured: " + syncInterval + "ms");
+        System.out.println("Redis Sync Interval Configured: " + syncInterval + "ms");
     }
 
     @Scheduled(fixedDelayString = "${scheduler.sync.interval}")
     public void syncClicksAndExpiryToDatabase() {
-        System.out.println("🔁 Syncing Redis data to DB...");
+        System.out.println("Syncing Redis data to DB...");
 
         List<UrlMapping> allMappings = urlMappingRepository.findAll();
 
@@ -54,10 +54,10 @@ public class RedisSyncService {
 
                 urlMappingRepository.save(mapping);
             } catch (Exception e) {
-                System.out.println("⚠️ Sync failed for " + shortCode + ": " + e.getMessage());
+                System.out.println("Sync failed for " + shortCode + ": " + e.getMessage());
             }
         }
 
-        System.out.println("✅ Sync complete.");
+        System.out.println("Sync complete.");
     }
 }
