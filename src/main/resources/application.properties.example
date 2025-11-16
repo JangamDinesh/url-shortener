@@ -12,3 +12,5 @@ spring.data.redis.password=${REDIS_PASSWORD}
 spring.data.redis.ssl.enabled=true
 
 spring.cache.type=redis
+rate.limit.maxRequests=5
+rate.limit.windowSeconds=60 // todo config
