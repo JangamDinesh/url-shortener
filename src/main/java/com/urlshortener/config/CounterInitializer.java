@@ -1,16 +1,18 @@
 package com.urlshortener.config;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.bson.Document;
 
+@Slf4j
 @Component
+@RequiredArgsConstructor
 public class CounterInitializer {
 
-    @Autowired
-    private MongoTemplate mongoTemplate;
+    private final MongoTemplate mongoTemplate;
 
     @PostConstruct
     public void initCounter() {
@@ -23,9 +25,9 @@ public class CounterInitializer {
             Document doc = new Document("_id", "url_sequence")
                     .append("seq", 0L);
             mongoTemplate.getCollection("counters").insertOne(doc);
-            System.out.println("Counter initialized in MongoDB.");
+            log.info("Counter initialized in MongoDB.");
         } else {
-            System.out.println("Counter already exists in MongoDB.");
+            log.info("Counter already exists in MongoDB.");
         }
     }
 }

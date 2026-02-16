@@ -1,17 +1,21 @@
 package com.urlshortener.service;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.urlshortener.util.RedisLuaScripts;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
+import java.util.Collections;
 
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class RateLimiterService {
 
-    @Autowired
-    private RedisTemplate<String, String> redisTemplate;
+    private final RedisTemplate<String, String> redisTemplate;
 
     @Value("${rate.limit.maxRequests}")
     private int maxRequests;
@@ -19,28 +23,34 @@ public class RateLimiterService {
     @Value("${rate.limit.windowSeconds}")
     private int timeWindowInSeconds;
 
+    private static final DefaultRedisScript<Long> RATE_LIMIT_SCRIPT;
+
+    static {
+        RATE_LIMIT_SCRIPT = new DefaultRedisScript<>();
+        RATE_LIMIT_SCRIPT.setScriptText(RedisLuaScripts.RATE_LIMIT_SCRIPT);
+        RATE_LIMIT_SCRIPT.setResultType(Long.class);
+    }
+
     public boolean isAllowed(String ipAddress) {
         String redisKey = "rate_limit:" + ipAddress;
 
         try {
-            // Increment the counter
-            Long currentCount = redisTemplate.opsForValue().increment(redisKey);
+            // Atomic increment + expire in a single Lua script — no race condition
+            Long currentCount = redisTemplate.execute(
+                    RATE_LIMIT_SCRIPT,
+                    Collections.singletonList(redisKey),
+                    String.valueOf(timeWindowInSeconds)
+            );
 
             if (currentCount == null) {
-                // Fallback in case Redis failed
                 return true;
-            }
-
-            if (currentCount == 1) {
-                // Set expiration on first access
-                redisTemplate.expire(redisKey, Duration.ofSeconds(timeWindowInSeconds));
             }
 
             return currentCount <= maxRequests;
 
         } catch (Exception e) {
             // In case Redis is down or error occurs, allow the request (fail-open)
-            System.err.println("Redis rate limit failed: " + e.getMessage());
+            log.error("Redis rate limit failed for IP={}", ipAddress, e);
             return true;
         }
     }

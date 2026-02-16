@@ -1,19 +1,22 @@
 package com.urlshortener.service;
 
-import com.urlshortener.exception.NotFoundException;
 import com.urlshortener.model.UrlMapping;
 import com.urlshortener.repo.UrlMappingRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
-import java.util.Optional;
-
+/**
+ * Caching layer for URL mapping lookups.
+ * Caches immutable fields (originalUrl, shortCode, createdAt) to avoid MongoDB hits on every redirect.
+ * Mutable state (clickCount, expiryDate) should always be read from manual Redis keys,
+ * not from the cached UrlMapping object.
+ */
 @Service
+@RequiredArgsConstructor
 public class UrlShortenerCacheService {
 
-    @Autowired
-    UrlMappingRepository urlMappingRepository;
+    private final UrlMappingRepository urlMappingRepository;
 
     @Cacheable(
             value = "urlMappingsByShortCode",

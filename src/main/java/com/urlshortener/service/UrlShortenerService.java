@@ -6,31 +6,36 @@ import com.urlshortener.model.UrlMapping;
 import com.urlshortener.model.UrlStatsResponse;
 import com.urlshortener.repo.UrlMappingRepository;
 import com.urlshortener.util.Base62Encoder;
-import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
+import com.urlshortener.util.RedisLuaScripts;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Optional;
+import java.util.Arrays;
 
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class UrlShortenerService {
 
-    @Autowired
-    private UrlMappingRepository urlMappingRepository;
+    private final UrlMappingRepository urlMappingRepository;
+    private final CounterService counterService;
+    private final RedisTemplate<String, String> redisTemplate;
+    private final UrlShortenerCacheService urlShortenerCacheService;
 
-    @Autowired
-    private CounterService counterService;
+    private static final String DIRTY_SET_KEY = "dirty_urls";
 
-    @Autowired
-    private RedisTemplate<String, String> redisTemplate;
+    private static final DefaultRedisScript<Long> REDIRECT_SCRIPT;
 
-    @Autowired
-    UrlShortenerCacheService urlShortenerCacheService;
+    static {
+        REDIRECT_SCRIPT = new DefaultRedisScript<>();
+        REDIRECT_SCRIPT.setScriptText(RedisLuaScripts.REDIRECT_SCRIPT);
+        REDIRECT_SCRIPT.setResultType(Long.class);
+    }
 
     public String shortenUrl(String originalUrl) {
         UrlMapping existing = urlShortenerCacheService.getShortCodeByOriginalURL(originalUrl);
@@ -56,9 +61,9 @@ public class UrlShortenerService {
         return shortCode;
     }
 
-
     public UrlMapping getUrlMappingByShortCode(String shortCode) throws ExpiredException, NotFoundException {
 
+        // @Cacheable layer: caches immutable fields (originalUrl, shortCode, createdAt) to avoid MongoDB hits
         UrlMapping mapping = urlShortenerCacheService.getByShortCode(shortCode);
 
         if (mapping == null) {
@@ -69,42 +74,37 @@ public class UrlShortenerService {
         String expiryKey = "url:" + shortCode + ":expiry";
 
         try {
-            // If Redis doesn't have keys, populate from DB value
-            if (!redisTemplate.hasKey(clickKey)) {
-                redisTemplate.opsForValue().set(clickKey, String.valueOf(mapping.getClickCount()));
-            }
+            // Single Lua script: check expiry + increment clicks + mark dirty — one round-trip
+            Long result = redisTemplate.execute(
+                    REDIRECT_SCRIPT,
+                    Arrays.asList(clickKey, expiryKey, DIRTY_SET_KEY),
+                    String.valueOf(mapping.getClickCount()),       // fallback clicks from DB
+                    mapping.getExpiryDate().toString(),            // fallback expiry from DB
+                    LocalDateTime.now().toString(),                // current time
+                    shortCode                                     // shortCode for dirty set
+            );
 
-            if (!redisTemplate.hasKey(expiryKey)) {
-                redisTemplate.opsForValue().set(expiryKey, mapping.getExpiryDate().toString());
-            }
-
-            // Validate expiry from Redis
-            String expiryStr = redisTemplate.opsForValue().get(expiryKey);
-            if (expiryStr == null || LocalDateTime.parse(expiryStr).isBefore(LocalDateTime.now())) {
+            if (result != null && result == -1) {
                 throw new ExpiredException("Short code expired");
             }
 
-            // Increment click count
-            redisTemplate.opsForValue().increment(clickKey);
-
-            // Sliding expiry
-            redisTemplate.opsForValue().set(expiryKey, LocalDateTime.now().plusDays(30).toString());
-
+        } catch (ExpiredException | NotFoundException e) {
+            throw e;
         } catch (Exception e) {
-            System.out.println("Redis failed, fallback to DB");
+            log.warn("Redis failed, falling back to DB for shortCode={}", shortCode, e);
 
             if (mapping.getExpiryDate().isBefore(LocalDateTime.now())) {
                 throw new ExpiredException("Short code expired");
             }
 
             mapping.setClickCount(mapping.getClickCount() + 1);
-            mapping.setExpiryDate(LocalDateTime.now().plusDays(30));
             urlMappingRepository.save(mapping);  // fallback DB update
         }
 
         return mapping;
     }
 
+    // Mutable state (clicks, expiry) is always read from Redis manual keys, not from the @Cacheable object.
     public UrlStatsResponse getStats(String shortCode) {
         UrlMapping mapping = urlShortenerCacheService.getByShortCode(shortCode);
 
@@ -124,7 +124,7 @@ public class UrlShortenerService {
 
             expiryStr = redisTemplate.opsForValue().get(expiryKey);
         } catch (Exception e) {
-            // Fallback to DB values
+            log.warn("Redis failed reading stats for shortCode={}, falling back to DB", shortCode, e);
             clicks = mapping.getClickCount();
             expiryStr = mapping.getExpiryDate().toString();
         }
@@ -138,6 +138,4 @@ public class UrlShortenerService {
 
         return stats;
     }
-
-
 }
